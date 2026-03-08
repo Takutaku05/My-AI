@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自作AIチャット</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        #chat-container { width: 100%; max-width: 500px; background: white; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: flex; flex-direction: column; height: 80vh; overflow: hidden; }
+        #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .message { padding: 10px 15px; border-radius: 20px; max-width: 80%; word-wrap: break-word; }
+        .user-msg { background-color: #0084ff; color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .ai-msg { background-color: #e4e6eb; color: black; align-self: flex-start; border-bottom-left-radius: 2px; }
+        #input-area { display: flex; padding: 10px; border-top: 1px solid #ccc; background: white; align-items: center; }
+        #model-select { padding: 10px; border: 1px solid #ccc; border-radius: 20px; outline: none; margin-right: 10px; background: white; cursor: pointer; }
+        #message-input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 20px; outline: none; }
+        #send-button:disabled { background-color: #ccc; }
+        
+        /* Markdown用のスタイル調整 */
+        .message p { margin: 0 0 10px 0; }
+        .message p:last-child { margin-bottom: 0; }
+        .message pre { background: #333; color: #fff; padding: 10px; border-radius: 5px; overflow-x: auto; }
+        .message code { background: #eee; color: #d63384; padding: 2px 4px; border-radius: 3px; font-family: monospace; }
+        .ai-msg code { background: #d0d2d6; color: #c82333; }
+        .message ul, .message ol { margin-top: 0; margin-bottom: 10px; padding-left: 20px; }
+    </style>
+    <!-- marked.js の読み込み -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+<div id="chat-container">
+    <div id="chat-box">
+        <div class="message ai-msg">チャットの始まり</div>
+    </div>
+    <div id="input-area">
+        <select id="model-select">
+            <option value="gemini-flash-latest">gemini-flash-latest</option>
+            <option value="gemini-pro-latest">gemini-pro-latest</option>
+        </select>
+        <input type="text" id="message-input" placeholder="メッセージを入力...">
+        <button id="send-button" onclick="sendMessage()">送信</button>
+    </div>
+</div>
+
+<script>
+    // ★今はローカルでテスト中なので localhost に向けています。
+    // ★Renderに公開した後は、ここをRenderのURLに変更します。
+    const API_URL = "http://localhost:8000/api/chat";
+
+    async function sendMessage() {
+        const selectedModel = document.getElementById("model-select").value;
+        const inputField = document.getElementById("message-input");
+        const sendButton = document.getElementById("send-button");
+        const chatBox = document.getElementById("chat-box");
+        const message = inputField.value.trim();
+
+        if (!message) return;
+
+        // 1. ユーザーのメッセージを画面に追加 (ユーザーの入力はテキストのまま)
+        addMessageToChat("user-msg", message, false);
+        inputField.value = "";
+        sendButton.disabled = true;
+
+        try {
+            // 2. バックエンド（FastAPI）にメッセージを送信
+            const response = await fetch(API_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: message, model: selectedModel })
+            });
+
+            const data = await response.json();
+
+            // 3. AIの返事を画面に追加 (AIの返信はMarkdownとしてパース)
+            if (data.reply) {
+                addMessageToChat("ai-msg", data.reply, true);
+            } else if (data.error) {
+                addMessageToChat("ai-msg", "エラーが発生しました: " + data.error, false);
+            }
+        } catch (error) {
+            addMessageToChat("ai-msg", "通信エラー。バックエンドの確認をしてください");
+        } finally {
+            sendButton.disabled = false;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    }
+
+    function addMessageToChat(className, text, isMarkdown = false) {
+        const chatBox = document.getElementById("chat-box");
+        const msgDiv = document.createElement("div");
+        msgDiv.className = "message " + className;
+        
+        if (isMarkdown) {
+            // marked.js を使ってMarkdownをHTMLに変換
+            msgDiv.innerHTML = marked.parse(text);
+        } else {
+            msgDiv.textContent = text;
+        }
+        
+        chatBox.appendChild(msgDiv);
+    }
+
+    // Enterキーで送信できるようにする
+    document.getElementById("message-input").addEventListener("keypress", function(e) {
+        if (e.key === "Enter") sendMessage();
+    });
+</script>
+
+</body>
+</html>
